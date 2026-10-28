@@ -10,8 +10,8 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse, parse_qs
 
 # ================= НАСТРОЙКИ =================
-BOT_TOKEN = '8660429035:AAEgkmB_oXzrZYz_JxI46sugIOEQJcAMrBs' # <-- ЗАМЕНИТЕ НА НОВЫЙ ПОСЛЕ /revoke
-ADMIN_ID = 8378052126 
+BOT_TOKEN = '8660429035:AAEgkmB_oXzrZYz_JxI46sugIOEQJcAMrBs' 
+ADMIN_ID = 8378052126
 # ============================================
 
 bot = telebot.TeleBot(BOT_TOKEN)
@@ -39,9 +39,11 @@ class ReusableHTTPServer(HTTPServer):
 
 class AuthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
+        # 1. Проверка кода для входа
         if self.path.startswith('/check_auth'):
             query = parse_qs(urlparse(self.path).query)
             code = query.get('code', [None])[0]
+            
             if code:
                 with db_lock:
                     conn = get_db()
@@ -49,21 +51,25 @@ class AuthHandler(BaseHTTPRequestHandler):
                     cursor.execute("SELECT tg_id, name FROM auth_codes WHERE code = ?", (code,))
                     row = cursor.fetchone()
                     conn.close()
+                
                 if row:
                     response = json.dumps({"status": "success", "id": row[0], "name": row[1]})
                 else:
                     response = json.dumps({"status": "not_found"})
             else:
                 response = json.dumps({"status": "error"})
+                
             self.send_response(200)
             self.send_header('Content-type', 'application/json')
             self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
             self.wfile.write(response.encode())
 
+        # 2. Получение данных друга по ID
         elif self.path.startswith('/get_user'):
             query = parse_qs(urlparse(self.path).query)
             friend_id = query.get('id', [None])[0]
+            
             if friend_id:
                 with db_lock:
                     conn = get_db()
@@ -71,6 +77,7 @@ class AuthHandler(BaseHTTPRequestHandler):
                     cursor.execute("SELECT username, tracks FROM users WHERE tg_id = ?", (friend_id,))
                     row = cursor.fetchone()
                     conn.close()
+                
                 if row:
                     tracks = json.loads(row[1]) if row[1] else []
                     response = json.dumps({"status": "success", "name": row[0], "tracks": tracks})
@@ -78,15 +85,18 @@ class AuthHandler(BaseHTTPRequestHandler):
                     response = json.dumps({"status": "not_found"})
             else:
                 response = json.dumps({"status": "error"})
+                
             self.send_response(200)
             self.send_header('Content-type', 'application/json')
             self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
             self.wfile.write(response.encode())
 
+        # 3. Получение прямой ссылки на аудиофайл по его Telegram file_id
         elif self.path.startswith('/get_audio'):
             query = parse_qs(urlparse(self.path).query)
             file_id = query.get('file_id', [None])[0]
+            
             if file_id:
                 try:
                     file_info = bot.get_file(file_id)
@@ -96,6 +106,7 @@ class AuthHandler(BaseHTTPRequestHandler):
                     response = json.dumps({"status": "error", "message": str(e)})
             else:
                 response = json.dumps({"status": "error"})
+                
             self.send_response(200)
             self.send_header('Content-type', 'application/json')
             self.send_header('Access-Control-Allow-Origin', '*')
@@ -106,8 +117,10 @@ class AuthHandler(BaseHTTPRequestHandler):
             self.end_headers()
 
 def run_server():
-    server = ReusableHTTPServer(('0.0.0.0', 5000), AuthHandler)
-    print("Веб-сервер для авторизации и друзей запущен на порту 5000...")
+    # Используем порт, который выдает Render, или 5000 для локальной работы
+    port = int(os.environ.get('PORT', 5000))
+    server = ReusableHTTPServer(('0.0.0.0', port), AuthHandler)
+    print(f"Веб-сервер для авторизации и друзей запущен на порту {port}...")
     server.serve_forever()
 
 # --- ПРЕМИУМ КЛЮЧИ ---
@@ -134,6 +147,7 @@ def save_keys():
 def start(message):
     tg_id = str(message.from_user.id)
     username = message.from_user.first_name or "Пользователь"
+    
     with db_lock:
         conn = get_db()
         cursor = conn.cursor()
@@ -166,6 +180,7 @@ def process_auth_code(message):
     code = message.text.strip().upper()
     user_id = str(message.from_user.id)
     username = message.from_user.first_name or "Пользователь"
+    
     try:
         with db_lock:
             conn = get_db()
@@ -173,6 +188,7 @@ def process_auth_code(message):
             cursor.execute("INSERT OR REPLACE INTO auth_codes (code, tg_id, name) VALUES (?, ?, ?)", (code, user_id, username))
             conn.commit()
             conn.close()
+            
         bot.send_message(
             message.chat.id,
             f"✅ Успешно! Код **{code}** привязан к вашему аккаунту.\n\n"
@@ -196,6 +212,7 @@ def handle_audio(message):
         cursor = conn.cursor()
         cursor.execute("SELECT tracks FROM users WHERE tg_id = ?", (tg_id,))
         row = cursor.fetchone()
+        
         if row:
             tracks = json.loads(row[0]) if row[0] else []
             tracks.append({
@@ -208,10 +225,12 @@ def handle_audio(message):
             conn.commit()
         conn.close()
 
+# --- ОЧИСТКА ТРЕКОВ ---
 @bot.message_handler(commands=['clear_tracks'])
 def clear_user_tracks(message):
     if message.from_user.id != ADMIN_ID:
         return
+    
     try:
         target_id = message.text.split()[1]
         with db_lock:
@@ -224,6 +243,7 @@ def clear_user_tracks(message):
     except Exception:
         bot.send_message(ADMIN_ID, "Ошибка. Используйте: `/clear_tracks ID_пользователя`", parse_mode='Markdown')
 
+# --- ОСТАЛЬНЫЕ ФУНКЦИИ ---
 @bot.message_handler(func=lambda message: message.text == '💳 Я оплатил (400₽)')
 def ask_for_receipt(message):
     bot.send_message(message.chat.id, "Отправьте ваш чек (фото или PDF) одним сообщением.")
@@ -234,10 +254,12 @@ def process_receipt(message):
         user_id = message.from_user.id
         username = message.from_user.username or "Без_юзернейма"
         pending_checks[user_id] = {"username": username, "chat_id": message.chat.id}
+        
         markup = types.InlineKeyboardMarkup()
         btn_approve = types.InlineKeyboardButton("✅ Подтвердить оплату", callback_data=f"approve_{user_id}")
         btn_reject = types.InlineKeyboardButton("❌ Отклонить", callback_data=f"reject_{user_id}")
         markup.add(btn_approve, btn_reject)
+
         bot.send_message(ADMIN_ID, f"🔔 **Новый чек на проверку!**\nОт: @{username} (ID: {user_id})", parse_mode='Markdown', reply_markup=markup)
         bot.forward_message(ADMIN_ID, message.chat.id, message.message_id)
         bot.send_message(message.chat.id, "✅ Чек отправлен на проверку!")
@@ -249,6 +271,7 @@ def handle_admin_action(call):
     if call.from_user.id != ADMIN_ID: return
     action, user_id_str = call.data.split('_')
     user_id = int(user_id_str)
+
     if action == 'approve':
         new_key = generate_key()
         valid_keys[new_key] = {"used": False}
