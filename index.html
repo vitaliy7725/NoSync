@@ -1310,7 +1310,7 @@
             formData.append('chat_id', myId);
             formData.append('audio', file, cleanName + '.mp3');
             formData.append('title', cleanName);
-            formData.append('performer', 'Локальный файл');
+            formData.append('performer', 'NoSync'); // ИСПРАВЛЕНО ТУТ
             formData.append('duration', Math.round(duration));
 
             fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendAudio`, {

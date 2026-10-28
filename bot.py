@@ -92,7 +92,7 @@ class AuthHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(response.encode())
 
-        # 3. Получение прямой ссылки на аудиофайл по его Telegram file_id
+        # 3. Получение прямой ссылки на аудиофайл
         elif self.path.startswith('/get_audio'):
             query = parse_qs(urlparse(self.path).query)
             file_id = query.get('file_id', [None])[0]
@@ -117,7 +117,6 @@ class AuthHandler(BaseHTTPRequestHandler):
             self.end_headers()
 
 def run_server():
-    # Используем порт, который выдает Render, или 5000 для локальной работы
     port = int(os.environ.get('PORT', 5000))
     server = ReusableHTTPServer(('0.0.0.0', port), AuthHandler)
     print(f"Веб-сервер для авторизации и друзей запущен на порту {port}...")
@@ -225,12 +224,10 @@ def handle_audio(message):
             conn.commit()
         conn.close()
 
-# --- ОЧИСТКА ТРЕКОВ ---
 @bot.message_handler(commands=['clear_tracks'])
 def clear_user_tracks(message):
     if message.from_user.id != ADMIN_ID:
         return
-    
     try:
         target_id = message.text.split()[1]
         with db_lock:
@@ -243,7 +240,6 @@ def clear_user_tracks(message):
     except Exception:
         bot.send_message(ADMIN_ID, "Ошибка. Используйте: `/clear_tracks ID_пользователя`", parse_mode='Markdown')
 
-# --- ОСТАЛЬНЫЕ ФУНКЦИИ ---
 @bot.message_handler(func=lambda message: message.text == '💳 Я оплатил (400₽)')
 def ask_for_receipt(message):
     bot.send_message(message.chat.id, "Отправьте ваш чек (фото или PDF) одним сообщением.")
