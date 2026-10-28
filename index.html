@@ -1293,7 +1293,7 @@
           let cleanName = file.name.replace(/\.[^/.]+$/, '');
           
           const trackData = {
-            name: cleanName, artist: 'Локальный файл', blob: file, duration: duration, coverBlob: coverBlob 
+            name: cleanName, artist: 'NoSync', blob: file, duration: duration, coverBlob: coverBlob 
           };
           
           const id = await saveTrackToDB(trackData);
@@ -1457,7 +1457,7 @@
         const url = URL.createObjectURL(track.blob);
         const coverUrl = track.coverBlob ? URL.createObjectURL(track.coverBlob) : null;
         return {
-          id: track.id, name: track.name, artist: track.artist || 'Локальный файл',
+          id: track.id, name: track.name, artist: track.artist || 'NoSync',
           blob: track.blob, url: url, duration: track.duration || 0,
           coverBlob: track.coverBlob, coverUrl: coverUrl
         };
